@@ -1,5 +1,6 @@
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import sessionmaker
 from app.db.database import Base, get_db
 from app.main import app
@@ -8,7 +9,9 @@ from app.models import * # Ensure all models are loaded
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
 engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+    SQLALCHEMY_DATABASE_URL, 
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
