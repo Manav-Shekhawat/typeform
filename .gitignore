@@ -1,0 +1,19 @@
+# Virtual environment
+.venv/
+backend/.venv/
+venv/
+ENV/
+
+# Python caching and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Databases
+backend/database.db
+*.db
+*.sqlite3
+
+# Environment variables / secrets
+.env
