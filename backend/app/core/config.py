@@ -4,6 +4,7 @@ class Settings(BaseSettings):
     app_name: str = "Typeform Clone API"
     environment: str = "development"
     database_url: str = "sqlite:///./typeform.db"
+    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
