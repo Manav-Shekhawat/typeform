@@ -21,6 +21,8 @@ export function BuilderClient({ id }: { id: string }) {
   const [isTypePickerOpen, setIsTypePickerOpen] = useState(false);
   const [isCreatingQuestion, setIsCreatingQuestion] = useState(false);
   const [creationError, setCreationError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   const handleCreateQuestion = async (type: QuestionType) => {
     if (!form) return;
@@ -58,6 +60,64 @@ export function BuilderClient({ id }: { id: string }) {
     } finally {
       setIsCreatingQuestion(false);
     }
+  };
+
+  const handleUpdateQuestion = (updatedQuestion: Question) => {
+    if (!form) return;
+    
+    const newQuestions = form.questions.map(q => 
+      q.id === updatedQuestion.id ? updatedQuestion : q
+    );
+    setForm({ ...form, questions: newQuestions });
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    setSaveStatus('saving');
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      if (!updatedQuestion.title.trim()) {
+        setSaveStatus('error');
+        return;
+      }
+      
+      if (updatedQuestion.type === QuestionType.NUMBER) {
+        const props = updatedQuestion.properties as { min?: number, max?: number };
+        if (props.min !== undefined && props.max !== undefined && props.min > props.max) {
+           setSaveStatus('error');
+           return;
+        }
+      }
+
+      if (updatedQuestion.type === QuestionType.MULTIPLE_CHOICE || updatedQuestion.type === QuestionType.DROPDOWN) {
+        const props = updatedQuestion.properties as { choices?: string[] };
+        const choices = props.choices || [];
+        if (choices.length === 0 || choices.some(c => !c.trim()) || new Set(choices).size !== choices.length) {
+          setSaveStatus('error');
+          return;
+        }
+      }
+
+      try {
+        await api.put(`/api/v1/forms/${id}/questions/${updatedQuestion.id}`, {
+          title: updatedQuestion.title,
+          description: updatedQuestion.description,
+          is_required: updatedQuestion.is_required,
+          properties: updatedQuestion.properties
+        });
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
+      } catch (err: unknown) {
+        const e = err as { status?: number };
+        if (e.status === 404) {
+          alert('Question no longer exists, reloading form...');
+          window.location.reload();
+        } else {
+          setSaveStatus('error');
+        }
+      }
+    }, 500);
   };
 
   useEffect(() => {
@@ -153,6 +213,8 @@ export function BuilderClient({ id }: { id: string }) {
         
         <QuestionSettings 
           question={selectedQuestion} 
+          onUpdate={handleUpdateQuestion}
+          saveStatus={saveStatus}
         />
       </main>
 
