@@ -7,9 +7,11 @@ import { QuestionList } from '@/components/builder/QuestionList';
 import { BuilderCanvas } from '@/components/builder/BuilderCanvas';
 import { QuestionSettings } from '@/components/builder/QuestionSettings';
 import { QuestionTypePicker } from '@/components/builder/QuestionTypePicker';
+import { DeleteQuestionModal } from '@/components/builder/DeleteQuestionModal';
 import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
 import { QuestionType, Question } from '@/lib/api/types';
+import { classNames } from '@/lib/utils/classNames';
 
 export function BuilderClient({ id }: { id: string }) {
   const [form, setForm] = useState<Form | null>(null);
@@ -20,14 +22,20 @@ export function BuilderClient({ id }: { id: string }) {
   
   const [isTypePickerOpen, setIsTypePickerOpen] = useState(false);
   const [isCreatingQuestion, setIsCreatingQuestion] = useState(false);
-  const [creationError, setCreationError] = useState<string | null>(null);
+  
+  const [questionToDelete, setQuestionToDelete] = useState<string | null>(null);
+  const [isDeletingQuestion, setIsDeletingQuestion] = useState(false);
+  
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   const handleCreateQuestion = async (type: QuestionType) => {
     if (!form) return;
     setIsCreatingQuestion(true);
-    setCreationError(null);
+    setActionError(null);
+    setActionSuccess(null);
     
     const order_index = form.questions && form.questions.length > 0
       ? Math.max(...form.questions.map(q => q.order_index)) + 1
@@ -56,9 +64,52 @@ export function BuilderClient({ id }: { id: string }) {
       setIsTypePickerOpen(false);
     } catch (err: unknown) {
       const e = err as { message?: string, data?: { detail?: string } };
-      setCreationError(e?.data?.detail || e.message || 'Failed to create question.');
+      setActionError(e?.data?.detail || e.message || 'Failed to create question.');
     } finally {
       setIsCreatingQuestion(false);
+    }
+  };
+
+  const handleDeleteQuestion = async () => {
+    if (!form || !questionToDelete) return;
+    
+    setIsDeletingQuestion(true);
+    setActionError(null);
+    setActionSuccess(null);
+
+    try {
+      await api.delete(`/api/v1/forms/${id}/questions/${questionToDelete}`);
+      
+      const idx = form.questions.findIndex(q => q.id === questionToDelete);
+      const newQuestions = form.questions.filter(q => q.id !== questionToDelete);
+      
+      let nextId = null;
+      if (newQuestions.length > 0) {
+        if (idx < newQuestions.length) {
+          nextId = newQuestions[idx].id;
+        } else {
+          nextId = newQuestions[newQuestions.length - 1].id;
+        }
+      }
+      
+      setForm({ ...form, questions: newQuestions });
+      setSelectedQuestionId(nextId);
+      setQuestionToDelete(null);
+      
+      setActionSuccess("Question deleted");
+      setTimeout(() => setActionSuccess(null), 3000);
+      
+    } catch (err: unknown) {
+      const e = err as { status?: number, message?: string, data?: { detail?: string } };
+      if (e.status === 404) {
+        setActionError("Question no longer exists, reloading form...");
+        setQuestionToDelete(null);
+        setTimeout(() => window.location.reload(), 2000);
+      } else {
+        setActionError(e?.data?.detail || e.message || "Could not delete question. Please try again.");
+      }
+    } finally {
+      setIsDeletingQuestion(false);
     }
   };
 
@@ -201,7 +252,8 @@ export function BuilderClient({ id }: { id: string }) {
           selectedId={selectedQuestionId} 
           onSelect={setSelectedQuestionId}
           onAddQuestionClick={() => {
-            setCreationError(null);
+            setActionError(null);
+            setActionSuccess(null);
             setIsTypePickerOpen(true);
           }}
         />
@@ -214,6 +266,7 @@ export function BuilderClient({ id }: { id: string }) {
         <QuestionSettings 
           question={selectedQuestion} 
           onUpdate={handleUpdateQuestion}
+          onDeleteRequest={setQuestionToDelete}
           saveStatus={saveStatus}
         />
       </main>
@@ -224,16 +277,48 @@ export function BuilderClient({ id }: { id: string }) {
         onSelect={handleCreateQuestion}
         isLoading={isCreatingQuestion}
       />
-      {creationError && (
-        <div className="fixed bottom-4 right-4 bg-red-50 text-red-800 px-4 py-3 rounded-lg shadow-lg border border-red-200 flex items-start z-50 max-w-sm">
-          <svg className="w-5 h-5 mr-3 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
+      
+      <DeleteQuestionModal
+        isOpen={questionToDelete !== null}
+        onClose={() => setQuestionToDelete(null)}
+        onConfirm={handleDeleteQuestion}
+        isDeleting={isDeletingQuestion}
+      />
+
+      {/* Action Toasts */}
+      {(actionError || actionSuccess) && (
+        <div className={classNames(
+          "fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg border flex items-start z-50 max-w-sm",
+          actionError ? "bg-red-50 border-red-200 text-red-800" : "bg-green-50 border-green-200 text-green-800"
+        )}>
+          {actionError ? (
+            <svg className="w-5 h-5 mr-3 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 mr-3 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+          
           <div className="flex-1">
-            <h4 className="text-sm font-medium">Could not create question</h4>
-            <p className="text-sm mt-1 text-red-600">{creationError}</p>
+            <h4 className="text-sm font-medium">{actionError ? 'Error' : 'Success'}</h4>
+            <p className={classNames(
+              "text-sm mt-1",
+              actionError ? "text-red-600" : "text-green-600"
+            )}>{actionError || actionSuccess}</p>
           </div>
-          <button onClick={() => setCreationError(null)} className="text-red-500 hover:text-red-700 ml-3">
+          
+          <button 
+            onClick={() => {
+              setActionError(null);
+              setActionSuccess(null);
+            }} 
+            className={classNames(
+              "ml-3 transition-colors",
+              actionError ? "text-red-500 hover:text-red-700" : "text-green-500 hover:text-green-700"
+            )}
+          >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
