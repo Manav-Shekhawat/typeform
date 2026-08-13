@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from app.core.config import settings
 from app.api import forms
+from app.api import questions
 
 app = FastAPI(title=settings.app_name)
 
@@ -9,3 +10,4 @@ def health_check():
     return {"status": "healthy", "environment": settings.environment}
 
 app.include_router(forms.router)
+app.include_router(questions.router)
