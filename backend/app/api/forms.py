@@ -34,3 +34,11 @@ def delete_form(form_id: str, service: FormService = Depends(get_form_service)):
 @router.post("/{form_id}/duplicate", response_model=FormDetailResponse, status_code=status.HTTP_201_CREATED)
 def duplicate_form(form_id: str, service: FormService = Depends(get_form_service)):
     return service.duplicate_form(form_id)
+
+@router.post("/{form_id}/publish", response_model=FormDetailResponse, status_code=status.HTTP_200_OK)
+def publish_form(form_id: str, service: FormService = Depends(get_form_service)):
+    return service.publish_form(form_id)
+
+@router.post("/{form_id}/unpublish", response_model=FormDetailResponse, status_code=status.HTTP_200_OK)
+def unpublish_form(form_id: str, service: FormService = Depends(get_form_service)):
+    return service.unpublish_form(form_id)

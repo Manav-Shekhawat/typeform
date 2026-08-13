@@ -1,7 +1,10 @@
+from datetime import datetime
 from sqlalchemy.orm import Session
 from app.repositories.form_repository import FormRepository, get_default_creator
 from app.schemas.form import FormCreate, FormUpdate, FormDetailResponse
 from app.schemas.question import QuestionResponse
+from app.models.form import FormStatus
+from app.services.question_service import QuestionService
 from fastapi import HTTPException
 
 class FormService:
@@ -73,5 +76,50 @@ class FormService:
         resp = FormDetailResponse.model_validate(new_form)
         
         active_questions = sorted([q for q in new_form.questions if not q.is_deleted], key=lambda q: q.order_index)
+        resp.questions = [QuestionResponse.model_validate(q) for q in active_questions]
+        return resp
+
+    def publish_form(self, form_id: str):
+        creator_id = self._get_creator_id()
+        form = self.repo.get_form_by_id_and_creator(form_id, creator_id)
+        if not form:
+            raise HTTPException(status_code=404, detail="Form not found")
+            
+        active_questions = sorted([q for q in form.questions if not q.is_deleted], key=lambda q: q.order_index)
+        if not active_questions:
+            raise HTTPException(status_code=400, detail="Cannot publish a form with no active questions")
+            
+        for q in active_questions:
+            try:
+                QuestionService.validate_properties(q.type, q.properties)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"Invalid configuration for question '{q.title}': {str(e)}")
+                
+        if form.status != FormStatus.published:
+            form.status = FormStatus.published
+            form.updated_at = datetime.utcnow()
+            self.db.commit()
+            self.db.refresh(form)
+            
+        setattr(form, "response_count", self.repo.count_responses(form.id))
+        resp = FormDetailResponse.model_validate(form)
+        resp.questions = [QuestionResponse.model_validate(q) for q in active_questions]
+        return resp
+
+    def unpublish_form(self, form_id: str):
+        creator_id = self._get_creator_id()
+        form = self.repo.get_form_by_id_and_creator(form_id, creator_id)
+        if not form:
+            raise HTTPException(status_code=404, detail="Form not found")
+            
+        if form.status != FormStatus.draft:
+            form.status = FormStatus.draft
+            form.updated_at = datetime.utcnow()
+            self.db.commit()
+            self.db.refresh(form)
+            
+        setattr(form, "response_count", self.repo.count_responses(form.id))
+        resp = FormDetailResponse.model_validate(form)
+        active_questions = sorted([q for q in form.questions if not q.is_deleted], key=lambda q: q.order_index)
         resp.questions = [QuestionResponse.model_validate(q) for q in active_questions]
         return resp

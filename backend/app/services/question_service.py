@@ -20,7 +20,8 @@ class QuestionService:
             raise HTTPException(status_code=404, detail="Form not found")
         return form
 
-    def _validate_properties(self, q_type: QuestionType, properties: Dict[str, Any] | None):
+    @staticmethod
+    def validate_properties(q_type: QuestionType, properties: Dict[str, Any] | None):
         if q_type == QuestionType.NUMBER:
             if properties:
                 min_val = properties.get("min")
@@ -48,7 +49,7 @@ class QuestionService:
         self._verify_ownership(form_id)
         
         try:
-            self._validate_properties(q_in.type, q_in.properties)
+            QuestionService.validate_properties(q_in.type, q_in.properties)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
             
@@ -73,7 +74,7 @@ class QuestionService:
         
         if q_in.type is not None or q_in.properties is not None:
             try:
-                self._validate_properties(new_type, new_props)
+                QuestionService.validate_properties(new_type, new_props)
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e))
                 

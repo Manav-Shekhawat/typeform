@@ -158,3 +158,94 @@ def test_other_creator_mutation_isolation(client, db_session):
     # DELETE another creator's form -> 404
     del_resp = client.delete(f"/api/v1/forms/{other_form.id}")
     assert del_resp.status_code == 404
+
+def test_publish_unpublish_lifecycle(client, db_session):
+    # Create form
+    resp = client.post("/api/v1/forms", json={"title": "Publish Test"})
+    form_id = resp.json()["id"]
+    slug = resp.json()["slug"]
+
+    # 5. Publish with no active questions -> 400
+    p_resp = client.post(f"/api/v1/forms/{form_id}/publish")
+    assert p_resp.status_code == 400
+
+    # Add question
+    client.post(f"/api/v1/forms/{form_id}/questions", json={"type": "SHORT_TEXT", "title": "Q1", "order_index": 0})
+    
+    # 1. Publish draft form with valid question -> 200
+    p_resp = client.post(f"/api/v1/forms/{form_id}/publish")
+    assert p_resp.status_code == 200
+    
+    # 2. Published status is persisted
+    assert p_resp.json()["status"] == "published"
+    
+    # 3/4. Slug is preserved
+    assert p_resp.json()["slug"] == slug
+    
+    # 14. Publish already-published form behaves safely
+    p_resp2 = client.post(f"/api/v1/forms/{form_id}/publish")
+    assert p_resp2.status_code == 200
+    
+    # 9. Unpublish published form -> 200
+    u_resp = client.post(f"/api/v1/forms/{form_id}/unpublish")
+    assert u_resp.status_code == 200
+    
+    # 10. Unpublish changes status to draft
+    assert u_resp.json()["status"] == "draft"
+    
+    # 11, 12. Unpublish preserves slug and questions
+    assert u_resp.json()["slug"] == slug
+    assert len(u_resp.json()["questions"]) == 1
+    
+    # 15. Unpublish already-draft behaves safely
+    u_resp2 = client.post(f"/api/v1/forms/{form_id}/unpublish")
+    assert u_resp2.status_code == 200
+    
+def test_publish_soft_deleted_questions_do_not_count(client):
+    form_id = client.post("/api/v1/forms", json={"title": "Test Form"}).json()["id"]
+    
+    # No questions initially -> fails
+    assert client.post(f"/api/v1/forms/{form_id}/publish").status_code == 400
+    
+    # Add question, then soft delete it
+    q_resp = client.post(f"/api/v1/forms/{form_id}/questions", json={"type": "SHORT_TEXT", "title": "Q1", "order_index": 0})
+    q_id = q_resp.json()["id"]
+    client.delete(f"/api/v1/forms/{form_id}/questions/{q_id}")
+    
+    # 6. Soft-deleted questions do not count toward publishability -> 400
+    assert client.post(f"/api/v1/forms/{form_id}/publish").status_code == 400
+
+def test_publish_invalid_active_question_prevents_publishing(client, db_session):
+    form_id = client.post("/api/v1/forms", json={"title": "Test Form"}).json()["id"]
+    
+    # Create question directly via DB to bypass API validation momentarily
+    form = db_session.query(Form).filter_by(id=form_id).first()
+    q = Question(form_id=form.id, type=QuestionType.RATING, title="Q", order_index=0, properties={"steps": 999})
+    db_session.add(q)
+    db_session.commit()
+    
+    # 7. Invalid active question configuration prevents publishing -> 400
+    resp = client.post(f"/api/v1/forms/{form_id}/publish")
+    assert resp.status_code == 400
+
+def test_publish_other_creator_form(client, db_session):
+    other_creator = Creator(name="Other")
+    db_session.add(other_creator)
+    db_session.commit()
+    
+    other_form = Form(creator_id=other_creator.id, title="Other Form", slug="other-slug3")
+    db_session.add(other_form)
+    db_session.commit()
+    
+    # 8. Another creator's form cannot be published -> 404
+    assert client.post(f"/api/v1/forms/{other_form.id}/publish").status_code == 404
+    assert client.post(f"/api/v1/forms/{other_form.id}/unpublish").status_code == 404
+
+def test_patch_endpoint_cannot_change_status(client):
+    form_id = client.post("/api/v1/forms", json={"title": "Test Form"}).json()["id"]
+    
+    # 16. Existing PATCH endpoint still cannot change status
+    resp = client.patch(f"/api/v1/forms/{form_id}", json={"status": "published"})
+    # It might ignore it if schema doesn't have it, or fail if it does
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "draft" # Ignored by schema
