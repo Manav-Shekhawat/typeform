@@ -6,16 +6,59 @@ import { BuilderHeader } from '@/components/builder/BuilderHeader';
 import { QuestionList } from '@/components/builder/QuestionList';
 import { BuilderCanvas } from '@/components/builder/BuilderCanvas';
 import { QuestionSettings } from '@/components/builder/QuestionSettings';
+import { QuestionTypePicker } from '@/components/builder/QuestionTypePicker';
 import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
+import { QuestionType, Question } from '@/lib/api/types';
 
 export function BuilderClient({ id }: { id: string }) {
   const [form, setForm] = useState<Form | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
-  
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
+  
+  const [isTypePickerOpen, setIsTypePickerOpen] = useState(false);
+  const [isCreatingQuestion, setIsCreatingQuestion] = useState(false);
+  const [creationError, setCreationError] = useState<string | null>(null);
+
+  const handleCreateQuestion = async (type: QuestionType) => {
+    if (!form) return;
+    setIsCreatingQuestion(true);
+    setCreationError(null);
+    
+    const order_index = form.questions && form.questions.length > 0
+      ? Math.max(...form.questions.map(q => q.order_index)) + 1
+      : 0;
+    
+    let properties = {};
+    if (type === QuestionType.MULTIPLE_CHOICE || type === QuestionType.DROPDOWN) {
+      properties = { choices: ["Option 1", "Option 2"] };
+    } else if (type === QuestionType.RATING) {
+      properties = { steps: 5 };
+    }
+    
+    try {
+      const newQuestion = await api.post<Question>(`/api/v1/forms/${id}/questions`, {
+        type,
+        title: "Untitled question",
+        description: null,
+        is_required: false,
+        order_index,
+        properties
+      });
+      
+      const updatedForm = { ...form, questions: [...(form.questions || []), newQuestion] };
+      setForm(updatedForm);
+      setSelectedQuestionId(newQuestion.id);
+      setIsTypePickerOpen(false);
+    } catch (err: unknown) {
+      const e = err as { message?: string, data?: { detail?: string } };
+      setCreationError(e?.data?.detail || e.message || 'Failed to create question.');
+    } finally {
+      setIsCreatingQuestion(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -96,7 +139,11 @@ export function BuilderClient({ id }: { id: string }) {
         <QuestionList 
           questions={form.questions} 
           selectedId={selectedQuestionId} 
-          onSelect={setSelectedQuestionId} 
+          onSelect={setSelectedQuestionId}
+          onAddQuestionClick={() => {
+            setCreationError(null);
+            setIsTypePickerOpen(true);
+          }}
         />
         
         <BuilderCanvas 
@@ -108,6 +155,29 @@ export function BuilderClient({ id }: { id: string }) {
           question={selectedQuestion} 
         />
       </main>
+
+      <QuestionTypePicker
+        isOpen={isTypePickerOpen}
+        onClose={() => setIsTypePickerOpen(false)}
+        onSelect={handleCreateQuestion}
+        isLoading={isCreatingQuestion}
+      />
+      {creationError && (
+        <div className="fixed bottom-4 right-4 bg-red-50 text-red-800 px-4 py-3 rounded-lg shadow-lg border border-red-200 flex items-start z-50 max-w-sm">
+          <svg className="w-5 h-5 mr-3 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div className="flex-1">
+            <h4 className="text-sm font-medium">Could not create question</h4>
+            <p className="text-sm mt-1 text-red-600">{creationError}</p>
+          </div>
+          <button onClick={() => setCreationError(null)} className="text-red-500 hover:text-red-700 ml-3">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
