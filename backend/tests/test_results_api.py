@@ -228,6 +228,9 @@ def test_statistics(client, test_data):
     assert rate_stat["average"] == 3.0
     assert rate_stat["distribution"] == {"1": 0, "2": 1, "3": 0, "4": 1, "5": 0}
 
+    # Regression test: soft-deleted questions should not appear in stats
+    assert q_map["Q_HIST"] not in stats
+
 def test_other_creator_stats_returns_404(client, test_data):
     # 25. Other creator cannot access stats
     resp = client.get(f"/api/v1/forms/{test_data['other_form_id']}/stats")

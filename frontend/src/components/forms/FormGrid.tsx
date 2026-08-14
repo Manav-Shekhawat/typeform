@@ -6,9 +6,12 @@ import { Button } from '@/components/ui/Button';
 interface FormGridProps {
   forms: Form[];
   onCreateClick: () => void;
+  onRename?: (id: string) => void;
+  onDuplicate?: (id: string) => void;
+  onDelete?: (id: string) => void;
 }
 
-export function FormGrid({ forms, onCreateClick }: FormGridProps) {
+export function FormGrid({ forms, onCreateClick, onRename, onDuplicate, onDelete }: FormGridProps) {
   if (forms.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-24 px-4 bg-white border border-gray-200 border-dashed rounded-xl">
@@ -31,7 +34,13 @@ export function FormGrid({ forms, onCreateClick }: FormGridProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       {forms.map((form) => (
-        <FormCard key={form.id} form={form} />
+        <FormCard 
+          key={form.id} 
+          form={form} 
+          onRename={onRename} 
+          onDuplicate={onDuplicate} 
+          onDelete={onDelete} 
+        />
       ))}
     </div>
   );

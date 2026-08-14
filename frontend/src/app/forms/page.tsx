@@ -5,12 +5,19 @@ import { Form } from '@/lib/api/types';
 import { FormGrid } from '@/components/forms/FormGrid';
 import { CreateFormDialog } from '@/components/forms/CreateFormDialog';
 import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
 
 export default function FormsList() {
   const [forms, setForms] = useState<Form[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  const [renameFormId, setRenameFormId] = useState<string | null>(null);
+  const [newTitle, setNewTitle] = useState('');
+  const [deleteFormId, setDeleteFormId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isActionLoading, setIsActionLoading] = useState(false);
 
   const fetchForms = async () => {
     try {
@@ -34,6 +41,58 @@ export default function FormsList() {
   const handleCreateSuccess = (newForm: Form) => {
     setForms([newForm, ...forms]);
     setIsCreateModalOpen(false);
+  };
+
+  const openRenameModal = (id: string) => {
+    const form = forms.find(f => f.id === id);
+    if (form) {
+      setNewTitle(form.title);
+      setRenameFormId(id);
+      setActionError(null);
+    }
+  };
+
+  const handleRename = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!renameFormId || !newTitle.trim()) return;
+    setIsActionLoading(true);
+    setActionError(null);
+    try {
+      const updated = await api.patch<Form>(`/api/v1/forms/${renameFormId}`, { title: newTitle.trim() });
+      setForms(forms.map(f => f.id === renameFormId ? updated : f));
+      setRenameFormId(null);
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      setActionError(e.message || 'Failed to rename form');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleDuplicate = async (id: string) => {
+    try {
+      const duplicated = await api.post<Form>(`/api/v1/forms/${id}/duplicate`);
+      setForms([duplicated, ...forms]);
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      alert(e.message || 'Failed to duplicate form');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteFormId) return;
+    setIsActionLoading(true);
+    setActionError(null);
+    try {
+      await api.delete(`/api/v1/forms/${deleteFormId}`);
+      setForms(forms.filter(f => f.id !== deleteFormId));
+      setDeleteFormId(null);
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      setActionError(e.message || 'Failed to delete form');
+    } finally {
+      setIsActionLoading(false);
+    }
   };
 
   return (
@@ -76,7 +135,13 @@ export default function FormsList() {
             </Button>
           </div>
         ) : (
-          <FormGrid forms={forms} onCreateClick={() => setIsCreateModalOpen(true)} />
+          <FormGrid 
+            forms={forms} 
+            onCreateClick={() => setIsCreateModalOpen(true)}
+            onRename={openRenameModal}
+            onDuplicate={handleDuplicate}
+            onDelete={(id) => { setDeleteFormId(id); setActionError(null); }}
+          />
         )}
 
       </div>
@@ -86,6 +151,42 @@ export default function FormsList() {
         onClose={() => setIsCreateModalOpen(false)} 
         onSuccess={handleCreateSuccess}
       />
+
+      <Modal isOpen={!!renameFormId} onClose={() => setRenameFormId(null)} title="Rename Form">
+        <form onSubmit={handleRename}>
+          <div className="mb-4">
+            <label htmlFor="form-title" className="block text-sm font-medium text-gray-700 mb-1">Form Title</label>
+            <input 
+              id="form-title"
+              type="text" 
+              value={newTitle} 
+              onChange={e => setNewTitle(e.target.value)}
+              className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-gray-900 focus:border-gray-900 sm:text-sm"
+              autoFocus
+            />
+          </div>
+          {actionError && <p className="text-sm text-red-600 mb-4">{actionError}</p>}
+          <div className="flex justify-end space-x-3">
+            <Button type="button" variant="secondary" onClick={() => setRenameFormId(null)} disabled={isActionLoading}>Cancel</Button>
+            <Button type="submit" variant="primary" disabled={isActionLoading || !newTitle.trim()}>
+              {isActionLoading ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal isOpen={!!deleteFormId} onClose={() => setDeleteFormId(null)} title="Delete Form">
+        <div className="mb-6">
+          <p className="text-sm text-gray-500">Are you sure you want to delete this form? This action cannot be undone and all responses will be permanently removed.</p>
+        </div>
+        {actionError && <p className="text-sm text-red-600 mb-4">{actionError}</p>}
+        <div className="flex justify-end space-x-3">
+          <Button type="button" variant="secondary" onClick={() => setDeleteFormId(null)} disabled={isActionLoading}>Cancel</Button>
+          <Button type="button" variant="primary" onClick={handleDelete} disabled={isActionLoading}>
+            {isActionLoading ? 'Deleting...' : 'Delete Form'}
+          </Button>
+        </div>
+      </Modal>
     </main>
   );
 }

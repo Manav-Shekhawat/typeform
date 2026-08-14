@@ -74,7 +74,8 @@ class ResultsService:
                 answers_by_q.setdefault(a.question_id, []).append(a.value)
                 
         stats_list = []
-        for q in form.questions:
+        active_questions = [q for q in form.questions if not q.is_deleted]
+        for q in active_questions:
             vals = answers_by_q.get(q.id, [])
             resp_count = len(vals)
             
