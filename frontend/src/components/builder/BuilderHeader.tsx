@@ -37,6 +37,13 @@ export function BuilderHeader({ form, onPreview, onPublish, onUnpublish, isPubli
       </div>
       
       <div className="flex items-center space-x-2 flex-1 justify-end">
+        {form && (
+          <Link href={`/forms/${form.id}/results`} className="hidden sm:inline-flex">
+            <Button variant="ghost">
+              Results
+            </Button>
+          </Link>
+        )}
         <Button variant="ghost" className="hidden sm:inline-flex" onClick={onPreview} disabled={!form}>
           Preview
         </Button>
