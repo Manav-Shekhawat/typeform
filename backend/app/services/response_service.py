@@ -59,6 +59,7 @@ class ResponseService:
                 errors.append({"question_id": q.id, "message": str(e)})
 
         if errors:
+            print(f"!!! VALIDATION ERRORS !!! Payload: {submission.model_dump_json()} | Errors: {errors}")
             raise HTTPException(status_code=400, detail=errors)
 
         try:
