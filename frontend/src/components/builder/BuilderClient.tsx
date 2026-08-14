@@ -13,6 +13,8 @@ import Link from 'next/link';
 import { QuestionType, Question } from '@/lib/api/types';
 import { classNames } from '@/lib/utils/classNames';
 import { arrayMove } from '@dnd-kit/sortable';
+import { BuilderPreview } from '@/components/builder/BuilderPreview';
+import { ShareModal } from '@/components/builder/ShareModal';
 
 export function BuilderClient({ id }: { id: string }) {
   const [form, setForm] = useState<Form | null>(null);
@@ -23,12 +25,14 @@ export function BuilderClient({ id }: { id: string }) {
   
   const [isTypePickerOpen, setIsTypePickerOpen] = useState(false);
   const [isCreatingQuestion, setIsCreatingQuestion] = useState(false);
-  
-  const [questionToDelete, setQuestionToDelete] = useState<string | null>(null);
   const [isDeletingQuestion, setIsDeletingQuestion] = useState(false);
-  
+  const [questionToDelete, setQuestionToDelete] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
@@ -152,6 +156,39 @@ export function BuilderClient({ id }: { id: string }) {
          }
        }
     })();
+  };
+
+  const handlePublish = async () => {
+    if (!form) return;
+    setIsPublishing(true);
+    setActionError(null);
+    try {
+      const resp = await api.post(`/api/v1/forms/${id}/publish`) as { slug: string };
+      setForm({ ...form, status: 'published', slug: resp.slug });
+      setShowShareModal(true);
+    } catch (err: unknown) {
+      const e = err as { data?: { detail?: string }, message?: string };
+      setActionError(e?.data?.detail || e.message || "Failed to publish form.");
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const handleUnpublish = async () => {
+    if (!form) return;
+    setIsPublishing(true);
+    setActionError(null);
+    try {
+      await api.post(`/api/v1/forms/${id}/unpublish`);
+      setForm({ ...form, status: 'draft' });
+      setActionSuccess("Form unpublished successfully");
+      setTimeout(() => setActionSuccess(null), 3000);
+    } catch (err: unknown) {
+      const e = err as { data?: { detail?: string }, message?: string };
+      setActionError(e?.data?.detail || e.message || "Failed to unpublish form.");
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   const handleUpdateQuestion = (updatedQuestion: Question) => {
@@ -283,11 +320,21 @@ export function BuilderClient({ id }: { id: string }) {
   const selectedQuestion = form.questions.find(q => q.id === selectedQuestionId) || null;
   const selectedIndex = selectedQuestion ? form.questions.findIndex(q => q.id === selectedQuestionId) : undefined;
 
+  if (isPreviewMode && form) {
+    return <BuilderPreview form={form} onClose={() => setIsPreviewMode(false)} />;
+  }
+
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-white">
-      <BuilderHeader form={form} />
+    <div className="flex flex-col h-screen bg-gray-50 overflow-hidden font-sans">
+      <BuilderHeader 
+        form={form} 
+        onPreview={() => setIsPreviewMode(true)}
+        onPublish={handlePublish}
+        onUnpublish={handleUnpublish}
+        isPublishing={isPublishing}
+      />
       
-      <main className="flex flex-1 overflow-hidden">
+      <main className="flex-1 flex overflow-hidden">
         <QuestionList 
           questions={form.questions} 
           selectedId={selectedQuestionId} 
@@ -366,6 +413,14 @@ export function BuilderClient({ id }: { id: string }) {
             </svg>
           </button>
         </div>
+      )}
+
+      {form && (
+        <ShareModal 
+          isOpen={showShareModal} 
+          onClose={() => setShowShareModal(false)} 
+          slug={form.slug || ''} 
+        />
       )}
     </div>
   );
