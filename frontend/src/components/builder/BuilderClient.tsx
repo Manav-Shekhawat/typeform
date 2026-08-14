@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
 import { QuestionType, Question } from '@/lib/api/types';
 import { classNames } from '@/lib/utils/classNames';
+import { arrayMove } from '@dnd-kit/sortable';
 
 export function BuilderClient({ id }: { id: string }) {
   const [form, setForm] = useState<Form | null>(null);
@@ -111,6 +112,46 @@ export function BuilderClient({ id }: { id: string }) {
     } finally {
       setIsDeletingQuestion(false);
     }
+  };
+
+  const handleReorderQuestions = (activeId: string, overId: string) => {
+    if (!form || activeId === overId) return;
+
+    const oldIndex = form.questions.findIndex(q => q.id === activeId);
+    const newIndex = form.questions.findIndex(q => q.id === overId);
+    
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const previousQuestions = [...form.questions];
+    const reorderedQuestions = arrayMove(form.questions, oldIndex, newIndex);
+    
+    const normalizedQuestions = reorderedQuestions.map((q, idx) => ({ ...q, order_index: idx }));
+    
+    setForm({ ...form, questions: normalizedQuestions });
+    
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    setSaveStatus('saving');
+    
+    (async () => {
+       try {
+         const payload = normalizedQuestions.map(q => ({ id: q.id, order_index: q.order_index }));
+         await api.put(`/api/v1/forms/${id}/questions/reorder`, payload);
+         setSaveStatus('saved');
+         setTimeout(() => setSaveStatus('idle'), 2000);
+       } catch (err: unknown) {
+         setForm({ ...form, questions: previousQuestions });
+         const e = err as { status?: number, message?: string, data?: { detail?: string } };
+         if (e.status === 404) {
+           setActionError("Form or questions not found. Reloading...");
+           setTimeout(() => window.location.reload(), 2000);
+         } else {
+           setActionError(e?.data?.detail || e.message || "Could not save order");
+           setSaveStatus('error');
+         }
+       }
+    })();
   };
 
   const handleUpdateQuestion = (updatedQuestion: Question) => {
@@ -256,6 +297,7 @@ export function BuilderClient({ id }: { id: string }) {
             setActionSuccess(null);
             setIsTypePickerOpen(true);
           }}
+          onReorder={handleReorderQuestions}
         />
         
         <BuilderCanvas 

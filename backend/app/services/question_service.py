@@ -115,13 +115,33 @@ class QuestionService:
             qs_to_update.append((active_qs_map[u.id], u.order_index))
             
         try:
-            # Shift to negative space to safely swap without UNIQUE constraint conflict
-            for q, _ in qs_to_update:
-                q.order_index = -1000 - q.order_index
+            # 1. Fetch ALL questions in the form (including soft-deleted)
+            from app.models.question import Question
+            all_qs = self.db.query(Question).filter(Question.form_id == form_id).all()
+            
+            # Save original indexes to restore unmentioned active questions
+            original_indexes = {q.id: q.order_index for q in all_qs}
+            
+            # 2. Shift ALL questions to guaranteed unique negative space
+            min_idx = min((q.order_index for q in all_qs), default=0)
+            base = min_idx - 1000
+            
+            for i, q in enumerate(all_qs):
+                q.order_index = base - i
             self.db.flush()
             
-            for q, target_idx in qs_to_update:
-                q.order_index = target_idx
+            # 3. Assign final order_index values
+            updates_dict = {u.id: u.order_index for u in updates}
+            
+            for q in all_qs:
+                if q.id in updates_dict:
+                    # Apply requested update
+                    q.order_index = updates_dict[q.id]
+                elif not q.is_deleted:
+                    # Restore unchanged active questions to trigger IntegrityError if they conflict
+                    q.order_index = original_indexes[q.id]
+                # Soft-deleted questions not in updates remain in safe negative space
+                
             self.db.commit()
         except IntegrityError:
             self.db.rollback()

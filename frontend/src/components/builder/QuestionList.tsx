@@ -1,15 +1,48 @@
 import React from 'react';
 import { Question } from '@/lib/api/types';
-import { QuestionListItem } from './QuestionListItem';
+import { QuestionListItem } from '@/components/builder/QuestionListItem';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 
 interface QuestionListProps {
   questions: Question[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   onAddQuestionClick: () => void;
+  onReorder: (activeId: string, overId: string) => void;
 }
 
-export function QuestionList({ questions, selectedId, onSelect, onAddQuestionClick }: QuestionListProps) {
+export function QuestionList({ questions, selectedId, onSelect, onAddQuestionClick, onReorder }: QuestionListProps) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      onReorder(active.id as string, over.id as string);
+    }
+  };
+
   return (
     <div className="w-64 border-r border-gray-200 bg-white flex flex-col shrink-0 overflow-y-auto">
       <div className="p-4 flex-1">
@@ -22,17 +55,28 @@ export function QuestionList({ questions, selectedId, onSelect, onAddQuestionCli
             No questions yet
           </div>
         ) : (
-          <div className="space-y-1">
-            {questions.map((q, index) => (
-              <QuestionListItem
-                key={q.id}
-                question={q}
-                index={index}
-                isSelected={selectedId === q.id}
-                onClick={() => onSelect(q.id)}
-              />
-            ))}
-          </div>
+          <DndContext 
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext 
+              items={questions.map(q => q.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-1">
+                {questions.map((q, index) => (
+                  <QuestionListItem
+                    key={q.id}
+                    question={q}
+                    index={index}
+                    isSelected={selectedId === q.id}
+                    onClick={() => onSelect(q.id)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
       </div>
 
