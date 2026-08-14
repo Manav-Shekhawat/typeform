@@ -1,8 +1,8 @@
 import React from 'react';
-import { Question, QuestionType } from '@/lib/api/types';
+import { Question, QuestionType, PublicQuestion } from '@/lib/api/types';
 
 interface QuestionRendererProps {
-  question: Question;
+  question: Question | PublicQuestion;
   index?: number;
 }
 

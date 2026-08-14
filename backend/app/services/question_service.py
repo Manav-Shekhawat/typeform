@@ -122,25 +122,29 @@ class QuestionService:
             # Save original indexes to restore unmentioned active questions
             original_indexes = {q.id: q.order_index for q in all_qs}
             
-            # 2. Shift ALL questions to guaranteed unique negative space
-            min_idx = min((q.order_index for q in all_qs), default=0)
-            base = min_idx - 1000
-            
+            # 2. Shift ALL questions to a guaranteed unique non-negative temporary space
+            # 1,000,000 is safely outside any reasonable form size
             for i, q in enumerate(all_qs):
-                q.order_index = base - i
+                q.order_index = 1000000 + i
             self.db.flush()
             
             # 3. Assign final order_index values
             updates_dict = {u.id: u.order_index for u in updates}
             
+            deleted_counter = 10000
+            
             for q in all_qs:
                 if q.id in updates_dict:
-                    # Apply requested update
+                    # Apply requested active update (0..n-1)
                     q.order_index = updates_dict[q.id]
-                elif not q.is_deleted:
+                elif q.is_deleted:
+                    # Assign a permanent non-negative unique index outside active range
+                    q.order_index = deleted_counter
+                    deleted_counter += 1
+                else:
                     # Restore unchanged active questions to trigger IntegrityError if they conflict
-                    q.order_index = original_indexes[q.id]
-                # Soft-deleted questions not in updates remain in safe negative space
+                    # Ensure we restore to a valid schema value (original index might be negative before repair)
+                    q.order_index = max(0, original_indexes[q.id])
                 
             self.db.commit()
         except IntegrityError:

@@ -32,10 +32,14 @@ class FormService:
             raise HTTPException(status_code=404, detail="Form not found")
             
         setattr(form, "response_count", self.repo.count_responses(form.id))
-        resp = FormDetailResponse.model_validate(form)
         
         active_questions = sorted([q for q in form.questions if not q.is_deleted], key=lambda q: q.order_index)
-        resp.questions = [QuestionResponse.model_validate(q) for q in active_questions]
+        
+        # Build the response directly to avoid validating deleted questions
+        resp = FormDetailResponse(
+            **{k: getattr(form, k) for k in ["id", "slug", "title", "description", "status", "theme_config", "thank_you_message", "created_at", "updated_at", "response_count"]},
+            questions=[QuestionResponse.model_validate(q) for q in active_questions]
+        )
         return resp
 
     def create_form(self, form_in: FormCreate):
@@ -52,10 +56,12 @@ class FormService:
         form = self.repo.update_form(form, form_in.title, form_in.description)
         
         setattr(form, "response_count", self.repo.count_responses(form.id))
-        resp = FormDetailResponse.model_validate(form)
         
         active_questions = sorted([q for q in form.questions if not q.is_deleted], key=lambda q: q.order_index)
-        resp.questions = [QuestionResponse.model_validate(q) for q in active_questions]
+        resp = FormDetailResponse(
+            **{k: getattr(form, k) for k in ["id", "slug", "title", "description", "status", "theme_config", "thank_you_message", "created_at", "updated_at", "response_count"]},
+            questions=[QuestionResponse.model_validate(q) for q in active_questions]
+        )
         return resp
 
     def delete_form(self, form_id: str):
@@ -73,10 +79,12 @@ class FormService:
         
         new_form = self.repo.duplicate_form(form)
         setattr(new_form, "response_count", 0)
-        resp = FormDetailResponse.model_validate(new_form)
         
         active_questions = sorted([q for q in new_form.questions if not q.is_deleted], key=lambda q: q.order_index)
-        resp.questions = [QuestionResponse.model_validate(q) for q in active_questions]
+        resp = FormDetailResponse(
+            **{k: getattr(new_form, k) for k in ["id", "slug", "title", "description", "status", "theme_config", "thank_you_message", "created_at", "updated_at", "response_count"]},
+            questions=[QuestionResponse.model_validate(q) for q in active_questions]
+        )
         return resp
 
     def publish_form(self, form_id: str):
@@ -102,8 +110,11 @@ class FormService:
             self.db.refresh(form)
             
         setattr(form, "response_count", self.repo.count_responses(form.id))
-        resp = FormDetailResponse.model_validate(form)
-        resp.questions = [QuestionResponse.model_validate(q) for q in active_questions]
+        
+        resp = FormDetailResponse(
+            **{k: getattr(form, k) for k in ["id", "slug", "title", "description", "status", "theme_config", "thank_you_message", "created_at", "updated_at", "response_count"]},
+            questions=[QuestionResponse.model_validate(q) for q in active_questions]
+        )
         return resp
 
     def unpublish_form(self, form_id: str):
@@ -119,7 +130,10 @@ class FormService:
             self.db.refresh(form)
             
         setattr(form, "response_count", self.repo.count_responses(form.id))
-        resp = FormDetailResponse.model_validate(form)
         active_questions = sorted([q for q in form.questions if not q.is_deleted], key=lambda q: q.order_index)
-        resp.questions = [QuestionResponse.model_validate(q) for q in active_questions]
+        
+        resp = FormDetailResponse(
+            **{k: getattr(form, k) for k in ["id", "slug", "title", "description", "status", "theme_config", "thank_you_message", "created_at", "updated_at", "response_count"]},
+            questions=[QuestionResponse.model_validate(q) for q in active_questions]
+        )
         return resp
