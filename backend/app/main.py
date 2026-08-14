@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
@@ -5,8 +6,21 @@ from app.api import forms
 from app.api import questions
 from app.api import public
 from app.api import responses
+from app.db.init_db import init_db, seed_db
+from app.db.database import SessionLocal
 
-app = FastAPI(title=settings.app_name)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize the database on startup
+    init_db()
+    db = SessionLocal()
+    try:
+        seed_db(db)
+    finally:
+        db.close()
+    yield
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
